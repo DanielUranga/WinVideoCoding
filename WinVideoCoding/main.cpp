@@ -301,49 +301,28 @@ void EncodeFile(PCWSTR pszInput, PCWSTR pszOutput)
 	HRESULT hr = pProfile.get()->GetContainerAttributes(&imfAttrs);
 	if (FAILED(hr))
 	{
-		if (pSource.get())
-		{
-			pSource.get()->Shutdown();
-		}
 		throw WindowsError(hr);
 	}
 
 	hr = MFCreateTranscodeTopology(pSource.get(), pszOutput, pProfile.get(), pTopology.getPointer());
 	if (FAILED(hr))
 	{
-		if (pSource.get())
-		{
-			pSource.get()->Shutdown();
-		}
 		throw WindowsError(hr);
 	}
 
 	hr = CSession::Create(pSession.getPointer());
 	if (FAILED(hr))
 	{
-		if (pSource.get())
-		{
-			pSource.get()->Shutdown();
-		}
 		throw WindowsError(hr);
 	}
 
 	hr = pSession.get()->StartEncodingSession(pTopology.get());
 	if (FAILED(hr))
 	{
-		if (pSource.get())
-		{
-			pSource.get()->Shutdown();
-		}
 		throw WindowsError(hr);
 	}
 
 	RunEncodingSession(pSession.get(), duration);
-
-	if (pSource.get())
-	{
-		pSource.get()->Shutdown();
-	}
 
 }
 
