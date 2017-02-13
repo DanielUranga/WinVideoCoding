@@ -82,7 +82,7 @@ void CreateMediaSource(PCWSTR pszURL, IMFMediaSource **ppSource)
 	hr = pSource.get()->QueryInterface(IID_PPV_ARGS(ppSource));
 }
 
-void CreateAACProfile(DWORD index, IMFAttributes **ppAttributes)
+SafeReleasePointerWrapper<IMFAttributes> CreateAACProfile(DWORD index)
 {
 	if (index >= ARRAYSIZE(h264_profiles))
 	{
@@ -93,6 +93,11 @@ void CreateAACProfile(DWORD index, IMFAttributes **ppAttributes)
 
 	SafeReleasePointerWrapper<IMFAttributes> pAttributes(nullptr);
 	HRESULT hr = MFCreateAttributes(pAttributes.getPointer(), 7);
+	if (FAILED(hr))
+	{
+		throw WindowsError(hr);
+	}
+
 	pAttributes.setGUID(MF_MT_SUBTYPE, MFAudioFormat_AAC);
 	pAttributes.setUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, profile.bitsPerSample);
 	pAttributes.setUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, profile.samplesPerSec);
@@ -100,68 +105,41 @@ void CreateAACProfile(DWORD index, IMFAttributes **ppAttributes)
 	pAttributes.setUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, profile.bytesPerSec);
 	pAttributes.setUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, 1);
 	pAttributes.setUINT32(MF_MT_AAC_AUDIO_PROFILE_LEVEL_INDICATION, profile.aacProfile);
-	
-	if (SUCCEEDED(hr))
-	{
-		*ppAttributes = pAttributes.get();
-		(*ppAttributes)->AddRef();
-	}
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
+
+	pAttributes.addRef(); // Is this needed?
+
+	return pAttributes;
 }
 
-void CreateH264Profile(DWORD index, IMFAttributes **ppAttributes)
+SafeReleasePointerWrapper<IMFAttributes> CreateH264Profile(DWORD index, IMFAttributes **ppAttributes)
 {
 	if (index >= ARRAYSIZE(h264_profiles))
 	{
 		throw WindowsError(E_INVALIDARG);
 	}
 
-	SafeReleasePointerWrapper<IMFAttributes> pAttributes(nullptr);
-
 	const H264ProfileInfo& profile = h264_profiles[index];
 
+	SafeReleasePointerWrapper<IMFAttributes> pAttributes(nullptr);
 	HRESULT hr = MFCreateAttributes(pAttributes.getPointer(), 5);
-	if (SUCCEEDED(hr))
-	{
-		hr = pAttributes.get()->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
-	}
-	if (SUCCEEDED(hr))
-	{
-		hr = pAttributes.get()->SetUINT32(MF_MT_MPEG2_PROFILE, profile.profile);
-	}
-	if (SUCCEEDED(hr))
-	{
-		hr = MFSetAttributeSize(pAttributes.get(), MF_MT_FRAME_SIZE, profile.frame_size.Numerator, profile.frame_size.Numerator);
-	}
-	if (SUCCEEDED(hr))
-	{
-		hr = MFSetAttributeRatio(pAttributes.get(), MF_MT_FRAME_RATE, profile.fps.Numerator, profile.fps.Denominator);
-	}
-	if (SUCCEEDED(hr))
-	{
-		hr = pAttributes.get()->SetUINT32(MF_MT_AVG_BITRATE, profile.bitrate);
-	}
-	if (SUCCEEDED(hr))
-	{
-		*ppAttributes = pAttributes.get();
-		(*ppAttributes)->AddRef();
-	}
 	if (FAILED(hr))
 	{
 		throw WindowsError(hr);
 	}
+	pAttributes.setGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
+	pAttributes.setUINT32(MF_MT_MPEG2_PROFILE, profile.profile);
+	pAttributes.setAttributeSize(MF_MT_FRAME_SIZE, profile.frame_size.Numerator, profile.frame_size.Numerator);
+	pAttributes.setAttributeRatio(MF_MT_FRAME_RATE, profile.fps.Numerator, profile.fps.Denominator);
+	pAttributes.setUINT32(MF_MT_AVG_BITRATE, profile.bitrate);
+	
+	pAttributes.addRef(); // Is this needed?
+
+	return pAttributes;
 }
 
-void CreateTranscodeProfile(IMFTranscodeProfile **ppProfile)
+SafeReleasePointerWrapper<IMFTranscodeProfile> CreateTranscodeProfile()
 {
 	SafeReleasePointerWrapper<IMFTranscodeProfile> pProfile(nullptr);
-	SafeReleasePointerWrapper<IMFAttributes> pAudio(nullptr);
-	SafeReleasePointerWrapper<IMFAttributes> pVideo(nullptr);
-	SafeReleasePointerWrapper<IMFAttributes> pContainer(nullptr);
-
 	HRESULT hr = MFCreateTranscodeProfile(pProfile.getPointer());
 	if (FAILED(hr))
 	{
@@ -169,33 +147,22 @@ void CreateTranscodeProfile(IMFTranscodeProfile **ppProfile)
 	}
 
 	// Audio attributes.
-	CreateAACProfile(audio_profile, pAudio.getPointer());
-	pProfile.get()->SetAudioAttributes(pAudio.get());
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
+	SafeReleasePointerWrapper<IMFAttributes> pAudio = CreateAACProfile(audio_profile);
+	pProfile.SetAudioAttributes(pAudio);
 
 	// Video attributes.
-	CreateH264Profile(video_profile, pVideo.getPointer());
-	pProfile.get()->SetVideoAttributes(pVideo.get());
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
+	SafeReleasePointerWrapper<IMFAttributes> pVideo = CreateH264Profile(video_profile, pVideo.getPointer());
+	pProfile.SetVideoAttributes(pVideo);
 
 	// Container attributes.
+	SafeReleasePointerWrapper<IMFAttributes> pContainer(nullptr);
 	hr = MFCreateAttributes(pContainer.getPointer(), 1);
 	if (FAILED(hr))
 	{
 		throw WindowsError(hr);
 	}
 
-	hr = pContainer.get()->SetGUID(MF_TRANSCODE_CONTAINERTYPE, MFTranscodeContainerType_MPEG4);
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
+	pContainer.setGUID(MF_TRANSCODE_CONTAINERTYPE, MFTranscodeContainerType_MPEG4);
 
 	hr = pProfile.get()->SetContainerAttributes(pContainer.get());
 	if (FAILED(hr))
@@ -203,8 +170,8 @@ void CreateTranscodeProfile(IMFTranscodeProfile **ppProfile)
 		throw WindowsError(hr);
 	}
 
-	*ppProfile = pProfile.get();
-	(*ppProfile)->AddRef();
+	pProfile.addRef();
+	return pProfile;
 }
 
 void RunEncodingSession(CSession *pSession, MFTIME duration)
@@ -243,8 +210,6 @@ void RunEncodingSession(CSession *pSession, MFTIME duration)
 
 void EncodeFile(PCWSTR pszInput, PCWSTR pszOutput)
 {
-
-	SafeReleasePointerWrapper<IMFTranscodeProfile> pProfile(nullptr);
 	SafeReleasePointerWrapper<IMFMediaSource> pSource(nullptr);
 	SafeReleasePointerWrapper<IMFTopology> pTopology(nullptr);
 	SafeReleasePointerWrapper<CSession> pSession(nullptr);
@@ -254,7 +219,7 @@ void EncodeFile(PCWSTR pszInput, PCWSTR pszOutput)
 	MFTIME duration = pSource.getDuration();
 	std::cout << "Duration: " << duration << std::endl;
 
-	CreateTranscodeProfile(pProfile.getPointer());
+	SafeReleasePointerWrapper<IMFTranscodeProfile> pProfile = CreateTranscodeProfile();
 	
 	IMFAttributes* imfAttrs = nullptr;
 	UINT32 count = 0;
@@ -330,6 +295,10 @@ int main(int argc, char* argv[])
 			catch (const WindowsError& err)
 			{
 				std::cout << "Catched exception - " << err.toString() << std::endl;
+			}
+			catch (const char* err)
+			{
+				std::cout << "Catched exception - " << err << std::endl;
 			}
 
 			delete[] arg1;

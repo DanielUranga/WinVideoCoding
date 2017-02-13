@@ -1,8 +1,10 @@
 #pragma once
 
 #include <iostream>
+#include <utility>
 
 #include "WindowsError.h"
+#include "mfapi.h"
 #include <mfidl.h>
 
 template <class T> void SafeRelease(T **ppT)
@@ -22,20 +24,69 @@ public:
 	T** getPointer() { return &ptr; }
 	T* get() { return ptr; }
 
+	void addRef() { throw "Should never be called - addRef"; }
 	MFTIME getDuration() { throw "Should never be called"; return 0; }
+
+	void setAttributeSize(REFGUID guidKey, UINT32 unWidth, UINT32 unHeight) { throw "Should never be called"; };
+	void setAttributeRatio(REFGUID guidKey, UINT32 unWidth, UINT32 unHeight) { throw "Should never be called"; };
 	void setGUID(REFGUID guidKey, REFGUID guidValue) { throw "Should never be called"; };
 	void setUINT32(REFGUID guidKey, UINT32 unValue) { throw "Should never be called"; };
+
+	void SetAudioAttributes(SafeReleasePointerWrapper<IMFAttributes>& attr) { throw "Should never be called"; };
+	void SetVideoAttributes(SafeReleasePointerWrapper<IMFAttributes>& attr) { throw "Should never be called"; };
 
 private:
 	T *ptr;
 };
 
-// IMFAttributes specializations:
+// addRefs
+
+template<>
+void SafeReleasePointerWrapper<IMFAttributes>::addRef()
+{
+	HRESULT hr = ptr->AddRef();
+	if (FAILED(hr))
+	{
+		throw WindowsError(hr);
+	}
+}
+
+template<>
+void SafeReleasePointerWrapper<IMFTranscodeProfile>::addRef()
+{
+	HRESULT hr = ptr->AddRef();
+	if (FAILED(hr))
+	{
+		throw WindowsError(hr);
+	}
+}
+
+// IMFAttributes specializations
 
 template<>
 void SafeReleasePointerWrapper<IMFAttributes>::setGUID(REFGUID guidKey, REFGUID guidValue)
 {
 	HRESULT hr = ptr->SetGUID(guidKey, guidValue);
+	if (FAILED(hr))
+	{
+		throw WindowsError(hr);
+	}
+}
+
+template<>
+void SafeReleasePointerWrapper<IMFAttributes>::setAttributeSize(REFGUID guidKey, UINT32 unWidth, UINT32 unHeight)
+{
+	HRESULT hr = MFSetAttributeSize(ptr, guidKey, unWidth, unHeight);
+	if (FAILED(hr))
+	{
+		throw WindowsError(hr);
+	}
+}
+
+template<>
+void SafeReleasePointerWrapper<IMFAttributes>::setAttributeRatio(REFGUID guidKey, UINT32 unWidth, UINT32 unHeight)
+{
+	HRESULT hr = MFSetAttributeRatio(ptr, guidKey, unWidth, unHeight);
 	if (FAILED(hr))
 	{
 		throw WindowsError(hr);
@@ -52,7 +103,7 @@ void SafeReleasePointerWrapper<IMFAttributes>::setUINT32(REFGUID guidKey, UINT32
 	}
 }
 
-// IMFMediaSource specializations:
+// IMFMediaSource specializations
 
 template<>
 SafeReleasePointerWrapper<IMFMediaSource>::~SafeReleasePointerWrapper()
@@ -79,5 +130,25 @@ MFTIME SafeReleasePointerWrapper<IMFMediaSource>::getDuration()
 		throw WindowsError(hr);
 	}
 	return pDuration;
+}
+
+// IMFTranscodeProfile specializations
+
+void SafeReleasePointerWrapper<IMFTranscodeProfile>::SetAudioAttributes(SafeReleasePointerWrapper<IMFAttributes>& attr)
+{
+	HRESULT hr = ptr->SetAudioAttributes(attr.get());
+	if (FAILED(hr))
+	{
+		throw WindowsError(hr);
+	}
+}
+
+void SafeReleasePointerWrapper<IMFTranscodeProfile>::SetVideoAttributes(SafeReleasePointerWrapper<IMFAttributes>& attr)
+{
+	HRESULT hr = ptr->SetVideoAttributes(attr.get());
+	if (FAILED(hr))
+	{
+		throw WindowsError(hr);
+	}
 }
 
