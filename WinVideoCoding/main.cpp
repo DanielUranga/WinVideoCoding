@@ -82,24 +82,6 @@ void CreateMediaSource(PCWSTR pszURL, IMFMediaSource **ppSource)
 	hr = pSource.get()->QueryInterface(IID_PPV_ARGS(ppSource));
 }
 
-void GetSourceDuration(IMFMediaSource *pSource, MFTIME *pDuration)
-{
-	*pDuration = 0;
-
-	IMFPresentationDescriptor *pPD = NULL;
-
-	HRESULT hr = pSource->CreatePresentationDescriptor(&pPD);
-	if (SUCCEEDED(hr))
-	{
-		hr = pPD->GetUINT64(MF_PD_DURATION, (UINT64*)pDuration);
-		pPD->Release();
-	}
-	else
-	{
-		throw WindowsError(hr);
-	}
-}
-
 void CreateAACProfile(DWORD index, IMFAttributes **ppAttributes)
 {
 	if (index >= ARRAYSIZE(h264_profiles))
@@ -110,36 +92,15 @@ void CreateAACProfile(DWORD index, IMFAttributes **ppAttributes)
 	const AACProfileInfo& profile = aac_profiles[index];
 
 	SafeReleasePointerWrapper<IMFAttributes> pAttributes(nullptr);
-
 	HRESULT hr = MFCreateAttributes(pAttributes.getPointer(), 7);
-	if (SUCCEEDED(hr))
-	{
-		hr = pAttributes.get()->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_AAC);
-	}
-	if (SUCCEEDED(hr))
-	{
-		hr = pAttributes.get()->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, profile.bitsPerSample);
-	}
-	if (SUCCEEDED(hr))
-	{
-		hr = pAttributes.get()->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, profile.samplesPerSec);
-	}
-	if (SUCCEEDED(hr))
-	{
-		hr = pAttributes.get()->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, profile.numChannels);
-	}
-	if (SUCCEEDED(hr))
-	{
-		hr = pAttributes.get()->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, profile.bytesPerSec);
-	}
-	if (SUCCEEDED(hr))
-	{
-		hr = pAttributes.get()->SetUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, 1);
-	}
-	if (SUCCEEDED(hr))
-	{
-		hr = pAttributes.get()->SetUINT32(MF_MT_AAC_AUDIO_PROFILE_LEVEL_INDICATION, profile.aacProfile);
-	}
+	pAttributes.setGUID(MF_MT_SUBTYPE, MFAudioFormat_AAC);
+	pAttributes.setUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, profile.bitsPerSample);
+	pAttributes.setUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, profile.samplesPerSec);
+	pAttributes.setUINT32(MF_MT_AUDIO_NUM_CHANNELS, profile.numChannels);
+	pAttributes.setUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, profile.bytesPerSec);
+	pAttributes.setUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, 1);
+	pAttributes.setUINT32(MF_MT_AAC_AUDIO_PROFILE_LEVEL_INDICATION, profile.aacProfile);
+	
 	if (SUCCEEDED(hr))
 	{
 		*ppAttributes = pAttributes.get();
@@ -290,8 +251,7 @@ void EncodeFile(PCWSTR pszInput, PCWSTR pszOutput)
 
 	CreateMediaSource(pszInput, pSource.getPointer());
 	
-	MFTIME duration = 0;
-	GetSourceDuration(pSource.get(), &duration);
+	MFTIME duration = pSource.getDuration();
 	std::cout << "Duration: " << duration << std::endl;
 
 	CreateTranscodeProfile(pProfile.getPointer());
