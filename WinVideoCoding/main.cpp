@@ -10,6 +10,7 @@
 #include "CSession.h"
 #include "SafeRelease.h"
 #include "WindowsError.h"
+#include "IMFObjectWrapper.h"
 
 #pragma comment(lib, "mfplat")
 #pragma comment(lib, "mf")
@@ -20,311 +21,266 @@
 
 struct H264ProfileInfo
 {
-	UINT32  profile;
-	MFRatio fps;
-	MFRatio frame_size;
-	UINT32  bitrate;
+    UINT32  profile;
+    MFRatio fps;
+    MFRatio frame_size;
+    UINT32  bitrate;
 };
 
 H264ProfileInfo h264_profiles[] =
 {
-	{ eAVEncH264VProfile_Base,{ 15, 1 },{ 176, 144 },   128000 },
-	{ eAVEncH264VProfile_Base,{ 15, 1 },{ 352, 288 },   384000 },
-	{ eAVEncH264VProfile_Base,{ 30, 1 },{ 352, 288 },   384000 },
-	{ eAVEncH264VProfile_Base,{ 29970, 1000 },{ 320, 240 },   528560 },
-	{ eAVEncH264VProfile_Base,{ 15, 1 },{ 720, 576 },  4000000 },
-	{ eAVEncH264VProfile_Main,{ 25, 1 },{ 720, 576 }, 10000000 },
-	{ eAVEncH264VProfile_Main,{ 30, 1 },{ 352, 288 }, 10000000 },
+    { eAVEncH264VProfile_Base,{ 15, 1 },{ 176, 144 },   128000 },
+    { eAVEncH264VProfile_Base,{ 15, 1 },{ 352, 288 },   384000 },
+    { eAVEncH264VProfile_Base,{ 30, 1 },{ 352, 288 },   384000 },
+    { eAVEncH264VProfile_Base,{ 29970, 1000 },{ 320, 240 },   528560 },
+    { eAVEncH264VProfile_Base,{ 15, 1 },{ 720, 576 },  4000000 },
+    { eAVEncH264VProfile_Main,{ 25, 1 },{ 720, 576 }, 10000000 },
+    { eAVEncH264VProfile_Main,{ 30, 1 },{ 352, 288 }, 10000000 },
 };
 
 struct AACProfileInfo
 {
-	UINT32  samplesPerSec;
-	UINT32  numChannels;
-	UINT32  bitsPerSample;
-	UINT32  bytesPerSec;
-	UINT32  aacProfile;
+    UINT32  samplesPerSec;
+    UINT32  numChannels;
+    UINT32  bitsPerSample;
+    UINT32  bytesPerSec;
+    UINT32  aacProfile;
 };
 
 AACProfileInfo aac_profiles[] =
 {
-	{ 96000, 2, 16, 24000, 0x29 },
-	{ 48000, 2, 16, 24000, 0x29 },
-	{ 44100, 2, 16, 16000, 0x29 },
-	{ 44100, 2, 16, 12000, 0x29 },
+    { 96000, 2, 16, 24000, 0x29 },
+    { 48000, 2, 16, 24000, 0x29 },
+    { 44100, 2, 16, 16000, 0x29 },
+    { 44100, 2, 16, 12000, 0x29 },
 };
 
 
 int video_profile = 0;
 int audio_profile = 0;
 
-void CreateMediaSource(PCWSTR pszURL, IMFMediaSource **ppSource)
+IMFWrappers::IMFMediaSourceWrapper CreateMediaSource(PCWSTR pszURL)
 {
-	MF_OBJECT_TYPE ObjectType = MF_OBJECT_INVALID;
-	SafeReleasePointerWrapper<IMFSourceResolver> pResolver(nullptr);
-	SafeReleasePointerWrapper<IUnknown> pSource(nullptr);
+    // Create the source resolver.
+    IMFWrappers::IMFSourceResolverWrapper pResolver;
+    IMFWrappers::IMFMediaSourceWrapper pSource;
 
-	// Create the source resolver.
-	HRESULT hr = MFCreateSourceResolver(pResolver.getPointer());
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
+    // Use the source resolver to create the media source
+    MF_OBJECT_TYPE objecType = MF_OBJECT_INVALID;
+    pResolver.CreateObjectFromURL(pszURL, MF_RESOLUTION_MEDIASOURCE, NULL, &objecType, pSource);
 
-	// Use the source resolver to create the media source
-	hr = pResolver.get()->CreateObjectFromURL(pszURL, MF_RESOLUTION_MEDIASOURCE, NULL, &ObjectType, pSource.getPointer());
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
+    pSource.QueryInterface();
 
-	// Get the IMFMediaSource interface from the media source.
-	hr = pSource.get()->QueryInterface(IID_PPV_ARGS(ppSource));
+    return std::move(pSource);
 }
 
-SafeReleasePointerWrapper<IMFAttributes> CreateAACProfile(DWORD index)
+IMFWrappers::IMFAttributesWrapper CreateAACProfile(DWORD index)
 {
-	if (index >= ARRAYSIZE(h264_profiles))
-	{
-		throw WindowsError(E_INVALIDARG);
-	}
+    if (index >= ARRAYSIZE(h264_profiles))
+    {
+        throw_windows_error(E_INVALIDARG);
+    }
 
-	const AACProfileInfo& profile = aac_profiles[index];
+    const AACProfileInfo& profile = aac_profiles[index];
 
-	SafeReleasePointerWrapper<IMFAttributes> pAttributes(nullptr);
-	HRESULT hr = MFCreateAttributes(pAttributes.getPointer(), 7);
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
+    IMFWrappers::IMFAttributesWrapper pAttributes(7);
 
-	pAttributes.setGUID(MF_MT_SUBTYPE, MFAudioFormat_AAC);
-	pAttributes.setUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, profile.bitsPerSample);
-	pAttributes.setUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, profile.samplesPerSec);
-	pAttributes.setUINT32(MF_MT_AUDIO_NUM_CHANNELS, profile.numChannels);
-	pAttributes.setUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, profile.bytesPerSec);
-	pAttributes.setUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, 1);
-	pAttributes.setUINT32(MF_MT_AAC_AUDIO_PROFILE_LEVEL_INDICATION, profile.aacProfile);
+    pAttributes.setGUID(MF_MT_SUBTYPE, MFAudioFormat_AAC);
+    pAttributes.setUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, profile.bitsPerSample);
+    pAttributes.setUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, profile.samplesPerSec);
+    pAttributes.setUINT32(MF_MT_AUDIO_NUM_CHANNELS, profile.numChannels);
+    pAttributes.setUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, profile.bytesPerSec);
+    pAttributes.setUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, 1);
+    pAttributes.setUINT32(MF_MT_AAC_AUDIO_PROFILE_LEVEL_INDICATION, profile.aacProfile);
 
-	pAttributes.addRef(); // Is this needed?
+    pAttributes.addRef(); // Is this needed?
 
-	return pAttributes;
+    return std::move(pAttributes);
 }
 
-SafeReleasePointerWrapper<IMFAttributes> CreateH264Profile(DWORD index, IMFAttributes **ppAttributes)
+IMFWrappers::IMFAttributesWrapper CreateH264Profile(DWORD index)
 {
-	if (index >= ARRAYSIZE(h264_profiles))
-	{
-		throw WindowsError(E_INVALIDARG);
-	}
+    if (index >= ARRAYSIZE(h264_profiles))
+    {
+        throw_windows_error(E_INVALIDARG);
+    }
 
-	const H264ProfileInfo& profile = h264_profiles[index];
+    const H264ProfileInfo& profile = h264_profiles[index];
 
-	SafeReleasePointerWrapper<IMFAttributes> pAttributes(nullptr);
-	HRESULT hr = MFCreateAttributes(pAttributes.getPointer(), 5);
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
-	pAttributes.setGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
-	pAttributes.setUINT32(MF_MT_MPEG2_PROFILE, profile.profile);
-	pAttributes.setAttributeSize(MF_MT_FRAME_SIZE, profile.frame_size.Numerator, profile.frame_size.Numerator);
-	pAttributes.setAttributeRatio(MF_MT_FRAME_RATE, profile.fps.Numerator, profile.fps.Denominator);
-	pAttributes.setUINT32(MF_MT_AVG_BITRATE, profile.bitrate);
-	
-	pAttributes.addRef(); // Is this needed?
+    IMFWrappers::IMFAttributesWrapper pAttributes(5);
 
-	return pAttributes;
+    pAttributes.setGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
+    pAttributes.setUINT32(MF_MT_MPEG2_PROFILE, profile.profile);
+    pAttributes.setAttributeSize(MF_MT_FRAME_SIZE, profile.frame_size.Numerator, profile.frame_size.Numerator);
+    pAttributes.setAttributeRatio(MF_MT_FRAME_RATE, profile.fps.Numerator, profile.fps.Denominator);
+    pAttributes.setUINT32(MF_MT_AVG_BITRATE, profile.bitrate);
+
+    pAttributes.addRef(); // Is this needed?
+
+    return std::move(pAttributes);
 }
 
-SafeReleasePointerWrapper<IMFTranscodeProfile> CreateTranscodeProfile()
+IMFWrappers::IMFTranscodeProfileWrapper CreateTranscodeProfile()
 {
-	SafeReleasePointerWrapper<IMFTranscodeProfile> pProfile(nullptr);
-	HRESULT hr = MFCreateTranscodeProfile(pProfile.getPointer());
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
+    IMFWrappers::IMFTranscodeProfileWrapper pProfile;
 
-	// Audio attributes.
-	SafeReleasePointerWrapper<IMFAttributes> pAudio = CreateAACProfile(audio_profile);
-	pProfile.SetAudioAttributes(pAudio);
+    // Audio attributes.
+    IMFWrappers::IMFAttributesWrapper pAudio = CreateAACProfile(audio_profile);
+    pProfile.SetAudioAttributes(pAudio);
 
-	// Video attributes.
-	SafeReleasePointerWrapper<IMFAttributes> pVideo = CreateH264Profile(video_profile, pVideo.getPointer());
-	pProfile.SetVideoAttributes(pVideo);
+    // Video attributes.
+    IMFWrappers::IMFAttributesWrapper pVideo = CreateH264Profile(video_profile);
+    pProfile.SetVideoAttributes(pVideo);
 
-	// Container attributes.
-	SafeReleasePointerWrapper<IMFAttributes> pContainer(nullptr);
-	hr = MFCreateAttributes(pContainer.getPointer(), 1);
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
+    // Container attributes.
+    IMFWrappers::IMFAttributesWrapper pContainer(1);
+    pContainer.setGUID(MF_TRANSCODE_CONTAINERTYPE, MFTranscodeContainerType_MPEG4);
+    
+    pProfile.SetContainerAttributes(pContainer);
+    pProfile.addRef();
 
-	pContainer.setGUID(MF_TRANSCODE_CONTAINERTYPE, MFTranscodeContainerType_MPEG4);
-
-	hr = pProfile.get()->SetContainerAttributes(pContainer.get());
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
-
-	pProfile.addRef();
-	return pProfile;
+    return std::move(pProfile);
 }
 
 void RunEncodingSession(CSession *pSession, MFTIME duration)
 {
-	const DWORD WAIT_PERIOD = 500;
-	const int   UPDATE_INCR = 5;
+    const DWORD WAIT_PERIOD = 500;
+    const int   UPDATE_INCR = 5;
 
-	HRESULT hr = S_OK;
-	MFTIME pos;
-	LONGLONG prev = 0;
-	while (1)
-	{
-		hr = pSession->Wait(WAIT_PERIOD);
-		if (hr == E_PENDING)
-		{
-			hr = pSession->GetEncodingPosition(&pos);
+    HRESULT hr = S_OK;
+    MFTIME pos;
+    LONGLONG prev = 0;
+    while (1)
+    {
+        hr = pSession->Wait(WAIT_PERIOD);
+        if (hr == E_PENDING)
+        {
+            hr = pSession->GetEncodingPosition(&pos);
 
-			LONGLONG percent = (100 * pos) / duration;
-			if (percent >= prev + UPDATE_INCR)
-			{
-				std::cout << percent << "% .. ";
-				prev = percent;
-			}
-		}
-		else
-		{
-			std::cout << std::endl;
-			break;
-		}
-	}
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
+            LONGLONG percent = (100 * pos) / duration;
+            if (percent >= prev + UPDATE_INCR)
+            {
+                std::cout << percent << "% .. ";
+                prev = percent;
+            }
+        }
+        else
+        {
+            std::cout << std::endl;
+            break;
+        }
+    }
+    if (FAILED(hr))
+    {
+        throw_windows_error(hr);
+    }
 }
 
 void EncodeFile(PCWSTR pszInput, PCWSTR pszOutput)
 {
-	SafeReleasePointerWrapper<IMFMediaSource> pSource(nullptr);
-	SafeReleasePointerWrapper<IMFTopology> pTopology(nullptr);
-	SafeReleasePointerWrapper<CSession> pSession(nullptr);
+    IMFWrappers::IMFMediaSourceWrapper pSource(CreateMediaSource(pszInput));
 
-	CreateMediaSource(pszInput, pSource.getPointer());
-	
-	MFTIME duration = pSource.getDuration();
-	std::cout << "Duration: " << duration << std::endl;
+    MFTIME duration = pSource.getDuration();
+    std::cout << "Duration: " << duration << std::endl;
 
-	SafeReleasePointerWrapper<IMFTranscodeProfile> pProfile = CreateTranscodeProfile();
-	
-	IMFAttributes* imfAttrs = nullptr;
-	UINT32 count = 0;
-	HRESULT hr = pProfile.get()->GetContainerAttributes(&imfAttrs);
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
+    IMFWrappers::IMFTranscodeProfileWrapper pProfile = CreateTranscodeProfile();
 
-	hr = MFCreateTranscodeTopology(pSource.get(), pszOutput, pProfile.get(), pTopology.getPointer());
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
+    IMFWrappers::IMFTopologyWrapper pTopology(pSource, pszOutput, pProfile);
 
-	hr = CSession::Create(pSession.getPointer());
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
+    //SafeReleasePointerWrapper<CSession> pSession(nullptr);
+    CSession *pSession;
+    HRESULT hr = CSession::Create(&pSession);
+    if (FAILED(hr))
+    {
+        throw_windows_error(hr);
+    }
 
-	hr = pSession.get()->StartEncodingSession(pTopology.get());
-	if (FAILED(hr))
-	{
-		throw WindowsError(hr);
-	}
+    hr = pSession->StartEncodingSession(pTopology.get());
+    if (FAILED(hr))
+    {
+        throw_windows_error(hr);
+    }
 
-	RunEncodingSession(pSession.get(), duration);
+    RunEncodingSession(pSession, duration);
+
+    pSession->Release();
 
 }
 
 int main(int argc, char* argv[]) 
 {
 
-	HeapSetInformation(NULL, HeapEnableTerminationOnCorruption, NULL, 0);
+    HeapSetInformation(NULL, HeapEnableTerminationOnCorruption, NULL, 0);
 
-	if (argc < 3 || argc > 5)
-	{
-		std::cout << "Usage:" << std::endl;
-		std::cout << "input output [ audio_profile video_profile ]" << std::endl;
-		return 1;
-	}
+    if (argc < 3 || argc > 5)
+    {
+        std::cout << "Usage:" << std::endl;
+        std::cout << "input output [ audio_profile video_profile ]" << std::endl;
+        return 1;
+    }
 
-	if (argc > 3)
-	{
-		audio_profile = atoi(argv[3]);
-	}
-	if (argc > 4)
-	{
-		video_profile = atoi(argv[4]);
-	}
+    if (argc > 3)
+    {
+        audio_profile = atoi(argv[3]);
+    }
+    if (argc > 4)
+    {
+        video_profile = atoi(argv[4]);
+    }
 
-	HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-	if (SUCCEEDED(hr))
-	{
-		hr = MFStartup(MF_VERSION);
-		if (SUCCEEDED(hr))
-		{
-			// arg1
-			size_t arg1Length = mbsrtowcs(NULL, (const char**)&argv[1], 0, NULL);
-			wchar_t* arg1 = new wchar_t[arg1Length + 1]();
-			arg1Length = mbsrtowcs(arg1, (const char**)&argv[1], arg1Length + 1, NULL);
+    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    if (SUCCEEDED(hr))
+    {
+        hr = MFStartup(MF_VERSION);
+        if (SUCCEEDED(hr))
+        {
+            // arg1
+            size_t arg1Length = mbsrtowcs(NULL, (const char**)&argv[1], 0, NULL);
+            wchar_t* arg1 = new wchar_t[arg1Length + 1]();
+            arg1Length = mbsrtowcs(arg1, (const char**)&argv[1], arg1Length + 1, NULL);
 
-			// arg2
-			size_t arg2Length = mbsrtowcs(NULL, (const char**)&argv[2], 0, NULL);
-			wchar_t* arg2 = new wchar_t[arg2Length + 1]();
-			arg1Length = mbsrtowcs(arg2, (const char**)&argv[2], arg2Length + 1, NULL);
+            // arg2
+            size_t arg2Length = mbsrtowcs(NULL, (const char**)&argv[2], 0, NULL);
+            wchar_t* arg2 = new wchar_t[arg2Length + 1]();
+            arg1Length = mbsrtowcs(arg2, (const char**)&argv[2], arg2Length + 1, NULL);
 
-			try
-			{
-				EncodeFile(arg1, arg2);
-			}
-			catch (const WindowsError& err)
-			{
-				std::cout << "Catched exception - " << err.toString() << std::endl;
-			}
-			catch (const char* err)
-			{
-				std::cout << "Catched exception - " << err << std::endl;
-			}
+            try
+            {
+                EncodeFile(arg1, arg2);
+            }
+            catch (const WindowsError& err)
+            {
+                std::cout << "Catched exception - " << err.toString() << std::endl;
+            }
+            catch (const char* err)
+            {
+                std::cout << "Catched exception - " << err << std::endl;
+            }
 
-			delete[] arg1;
-			delete[] arg2;
+            delete[] arg1;
+            delete[] arg2;
 
-			MFShutdown();
-		}
-		else
-		{
-			std::cout << "Can't MFStartup: " << std::hex << hr << std::endl;
-		}
-		CoUninitialize();
-	}
-	else
-	{
-		std::cout << "Can't CoInitializeEx: " << std::hex << hr << std::endl;
-	}
+            MFShutdown();
+        }
+        else
+        {
+            std::cout << "Can't MFStartup: " << std::hex << hr << std::endl;
+        }
+        CoUninitialize();
+    }
+    else
+    {
+        std::cout << "Can't CoInitializeEx: " << std::hex << hr << std::endl;
+    }
 
-	if (SUCCEEDED(hr))
-	{
-		std::cout << "Done." << std::endl;
-	}
-	else
-	{
-		std::cout << "Error: " << std::hex << hr << std::endl;
-	}
+    if (SUCCEEDED(hr))
+    {
+        std::cout << "Done." << std::endl;
+    }
+    else
+    {
+        std::cout << "Error: " << std::hex << hr << std::endl;
+    }
 
-	return 0;
+    return 0;
 }

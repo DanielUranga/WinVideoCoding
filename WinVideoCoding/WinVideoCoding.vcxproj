@@ -111,10 +111,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="CSession.cpp" />
+    <ClCompile Include="IMFObjectWrapper.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CSession.h" />
+    <ClInclude Include="IMFObjectWrapper.h" />
     <ClInclude Include="WindowsError.h" />
     <ClInclude Include="SafeRelease.h" />
   </ItemGroup>
