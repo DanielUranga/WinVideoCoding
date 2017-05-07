@@ -78,7 +78,7 @@ IMFWrappers::IMFAttributesWrapper CreateAACProfile(DWORD index)
 {
     if (index >= ARRAYSIZE(h264_profiles))
     {
-        throw_windows_error(E_INVALIDARG);
+        THROW_WINDOWS_ERROR(E_INVALIDARG);
     }
 
     const AACProfileInfo& profile = aac_profiles[index];
@@ -102,7 +102,7 @@ IMFWrappers::IMFAttributesWrapper CreateH264Profile(DWORD index)
 {
     if (index >= ARRAYSIZE(h264_profiles))
     {
-        throw_windows_error(E_INVALIDARG);
+        THROW_WINDOWS_ERROR(E_INVALIDARG);
     }
 
     const H264ProfileInfo& profile = h264_profiles[index];
@@ -172,7 +172,7 @@ void RunEncodingSession(CSession *pSession, MFTIME duration)
     }
     if (FAILED(hr))
     {
-        throw_windows_error(hr);
+        THROW_WINDOWS_ERROR(hr);
     }
 }
 
@@ -187,19 +187,9 @@ void EncodeFile(PCWSTR pszInput, PCWSTR pszOutput)
 
     IMFWrappers::IMFTopologyWrapper pTopology(pSource, pszOutput, pProfile);
 
-    //SafeReleasePointerWrapper<CSession> pSession(nullptr);
     CSession *pSession;
-    HRESULT hr = CSession::Create(&pSession);
-    if (FAILED(hr))
-    {
-        throw_windows_error(hr);
-    }
-
-    hr = pSession->StartEncodingSession(pTopology.get());
-    if (FAILED(hr))
-    {
-        throw_windows_error(hr);
-    }
+    DO_CHECKED_OPERATION(CSession::Create(&pSession));
+    DO_CHECKED_OPERATION(pSession->StartEncodingSession(pTopology.get()));
 
     RunEncodingSession(pSession, duration);
 

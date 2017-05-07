@@ -8,7 +8,16 @@
 #include <locale>
 #include <codecvt>
 
-#define throw_windows_error(arg) throw WindowsError(arg, __FILE__, __LINE__);
+#define THROW_WINDOWS_ERROR(arg) throw WindowsError(arg, __FILE__, __LINE__);
+
+#define DO_CHECKED_OPERATION(X) \
+{ \
+    HRESULT hr = X; \
+    if (FAILED(hr)) \
+    { \
+        THROW_WINDOWS_ERROR(hr); \
+    } \
+} \
 
 class WindowsError {
 public:

@@ -38,11 +38,7 @@ namespace IMFWrappers
 
         virtual void addRef()
         {
-            HRESULT hr = ptr->AddRef();
-            if (FAILED(hr))
-            {
-                throw_windows_error(hr);
-            }
+            DO_CHECKED_OPERATION(ptr->AddRef());
         }
     };
 
@@ -55,11 +51,7 @@ namespace IMFWrappers
 
         IMFAttributesWrapper(const size_t size)
         {
-            HRESULT hr = MFCreateAttributes(&ptr, 7);
-            if (FAILED(hr))
-            {
-                throw_windows_error(hr);
-            }
+            DO_CHECKED_OPERATION(MFCreateAttributes(&ptr, 7));
         }
 
         IMFAttributesWrapper(IMFAttributesWrapper&& other)
@@ -70,38 +62,22 @@ namespace IMFWrappers
 
         void setGUID(REFGUID guidKey, REFGUID guidValue)
         {
-            HRESULT hr = ptr->SetGUID(guidKey, guidValue);
-            if (FAILED(hr))
-            {
-                throw_windows_error(hr);
-            }
+            DO_CHECKED_OPERATION(ptr->SetGUID(guidKey, guidValue));
         }
 
         void setAttributeSize(REFGUID guidKey, UINT32 unWidth, UINT32 unHeight)
         {
-            HRESULT hr = MFSetAttributeSize(ptr, guidKey, unWidth, unHeight);
-            if (FAILED(hr))
-            {
-                throw_windows_error(hr);
-            }
+            DO_CHECKED_OPERATION(MFSetAttributeSize(ptr, guidKey, unWidth, unHeight));
         }
 
         void setAttributeRatio(REFGUID guidKey, UINT32 unWidth, UINT32 unHeight)
         {
-            HRESULT hr = MFSetAttributeRatio(ptr, guidKey, unWidth, unHeight);
-            if (FAILED(hr))
-            {
-                throw_windows_error(hr);
-            }
+            DO_CHECKED_OPERATION(MFSetAttributeRatio(ptr, guidKey, unWidth, unHeight));
         }
 
         void setUINT32(REFGUID guidKey, UINT32 unValue)
         {
-            HRESULT hr = ptr->SetUINT32(guidKey, unValue);
-            if (FAILED(hr))
-            {
-                throw_windows_error(hr);
-            }
+            DO_CHECKED_OPERATION(ptr->SetUINT32(guidKey, unValue));
         }
 
     };
@@ -134,28 +110,17 @@ namespace IMFWrappers
         {
             MFTIME pDuration = 0;
             IMFPresentationDescriptor *pPD = NULL;
-            HRESULT hr = ptr->CreatePresentationDescriptor(&pPD);
-            if (SUCCEEDED(hr))
-            {
-                UINT64 tmp;
-                hr = pPD->GetUINT64(MF_PD_DURATION, &tmp);
-                pDuration = tmp;
-                pPD->Release();
-            }
-            else
-            {
-                throw_windows_error(hr);
-            }
+            DO_CHECKED_OPERATION(ptr->CreatePresentationDescriptor(&pPD));
+            UINT64 tmp;
+            DO_CHECKED_OPERATION(pPD->GetUINT64(MF_PD_DURATION, &tmp));
+            pDuration = tmp;
+            pPD->Release();
             return pDuration;
         }
 
         void QueryInterface()
         {
-            HRESULT hr = ptr->QueryInterface(IID_PPV_ARGS(&ptr));
-            if (FAILED(hr))
-            {
-                throw_windows_error(hr);
-            }
+            DO_CHECKED_OPERATION(ptr->QueryInterface(IID_PPV_ARGS(&ptr)));
         }
 
     };
@@ -166,21 +131,13 @@ namespace IMFWrappers
     public:
         IMFSourceResolverWrapper()
         {
-            HRESULT hr = MFCreateSourceResolver(&ptr);
-            if (FAILED(hr))
-            {
-                throw_windows_error(hr);
-            }
+            DO_CHECKED_OPERATION(MFCreateSourceResolver(&ptr));
         }
 
         template <typename T>
         void CreateObjectFromURL(LPCWSTR pwszURL, DWORD dwFlags, IPropertyStore *pProps, MF_OBJECT_TYPE *pObjectType, IMFObjectWrapper<T>& ppObject)
         {
-            HRESULT hr = ptr->CreateObjectFromURL(pwszURL, MF_RESOLUTION_MEDIASOURCE, NULL, pObjectType, reinterpret_cast<IUnknown**>(ppObject.getPointer()));
-            if (FAILED(hr))
-            {
-                throw_windows_error(hr);
-            }
+            DO_CHECKED_OPERATION(ptr->CreateObjectFromURL(pwszURL, MF_RESOLUTION_MEDIASOURCE, NULL, pObjectType, reinterpret_cast<IUnknown**>(ppObject.getPointer())));
         }
 
     };
@@ -190,11 +147,7 @@ namespace IMFWrappers
     public:
         IMFTranscodeProfileWrapper()
         {
-            HRESULT hr = MFCreateTranscodeProfile(&ptr);
-            if (FAILED(hr))
-            {
-                throw_windows_error(hr);
-            }
+            DO_CHECKED_OPERATION(MFCreateTranscodeProfile(&ptr));
         }
 
         IMFTranscodeProfileWrapper(IMFTranscodeProfileWrapper&& other)
@@ -205,29 +158,17 @@ namespace IMFWrappers
 
         void SetAudioAttributes(IMFAttributesWrapper& attr)
         {
-            HRESULT hr = ptr->SetAudioAttributes(attr.get());
-            if (FAILED(hr))
-            {
-                throw_windows_error(hr);
-            }
+            DO_CHECKED_OPERATION(ptr->SetAudioAttributes(attr.get()));
         }
 
         void SetContainerAttributes(IMFAttributesWrapper& attr)
         {
-            HRESULT hr = ptr->SetContainerAttributes(attr.get());
-            if (FAILED(hr))
-            {
-                throw_windows_error(hr);
-            }
+            DO_CHECKED_OPERATION(ptr->SetContainerAttributes(attr.get()));
         }
 
         void SetVideoAttributes(IMFAttributesWrapper& attr)
         {
-            HRESULT hr = ptr->SetVideoAttributes(attr.get());
-            if (FAILED(hr))
-            {
-                throw_windows_error(hr);
-            }
+            DO_CHECKED_OPERATION(ptr->SetVideoAttributes(attr.get()));
         }
     };
 
@@ -236,11 +177,7 @@ namespace IMFWrappers
     public:
         IMFTopologyWrapper(IMFMediaSourceWrapper& pSrc, LPCWSTR pwszOutputFilePath, IMFTranscodeProfileWrapper& pProfile)
         {
-            HRESULT hr = MFCreateTranscodeTopology(pSrc.get(), pwszOutputFilePath, pProfile.get(), &ptr);
-            if (FAILED(hr))
-            {
-                throw_windows_error(hr);
-            }
+            DO_CHECKED_OPERATION(MFCreateTranscodeTopology(pSrc.get(), pwszOutputFilePath, pProfile.get(), &ptr));
         }
     };
 
