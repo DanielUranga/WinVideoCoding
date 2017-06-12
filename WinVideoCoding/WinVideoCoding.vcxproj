@@ -112,7 +112,8 @@
   <ItemGroup>
     <ClCompile Include="CSession.cpp" />
     <ClCompile Include="IMFObjectWrapper.cpp" />
-    <ClCompile Include="main.cpp" />
+    <ClCompile Include="EncodeFile.cpp" />
+    <ClCompile Include="SinkWriter.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CSession.h" />

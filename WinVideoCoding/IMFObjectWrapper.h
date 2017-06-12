@@ -5,8 +5,12 @@
 
 #include "SafeRelease.h"
 #include "WindowsError.h"
-#include "mfapi.h"
+
+#include <Windows.h>
+#include <mfapi.h>
 #include <mfidl.h>
+#include <Mfreadwrite.h>
+#include <mferror.h>
 
 namespace IMFWrappers
 {
@@ -21,7 +25,7 @@ namespace IMFWrappers
         virtual ~IMFObjectWrapper() {};
 
         T** getPointer() { return &ptr; }
-        T* get() { return ptr; }
+        T* get() const { return ptr; }
 
     protected:
         T* ptr;
@@ -30,11 +34,10 @@ namespace IMFWrappers
     // ------------------------------------------------------------------------
 
     template<typename T>
-    class AddRefWrapper : public IMFObjectWrapper<T>
+    class AddRefWrapper : public virtual IMFObjectWrapper<T>
     {
     public:
         AddRefWrapper() {};
-        AddRefWrapper(const AddRefWrapper&) = delete;
 
         virtual void addRef()
         {
@@ -44,27 +47,9 @@ namespace IMFWrappers
 
     // ------------------------------------------------------------------------
 
-    class IMFAttributesWrapper : public AddRefWrapper<IMFAttributes>
+    template<typename T>
+    struct IMFHasAttributes : public virtual IMFObjectWrapper<T>
     {
-
-    public:
-
-        IMFAttributesWrapper(const size_t size)
-        {
-            DO_CHECKED_OPERATION(MFCreateAttributes(&ptr, 7));
-        }
-
-        IMFAttributesWrapper(IMFAttributesWrapper&& other)
-        {
-            this->ptr = other.ptr;
-            other.ptr = nullptr;
-        }
-
-        void setGUID(REFGUID guidKey, REFGUID guidValue)
-        {
-            DO_CHECKED_OPERATION(ptr->SetGUID(guidKey, guidValue));
-        }
-
         void setAttributeSize(REFGUID guidKey, UINT32 unWidth, UINT32 unHeight)
         {
             DO_CHECKED_OPERATION(MFSetAttributeSize(ptr, guidKey, unWidth, unHeight));
@@ -73,6 +58,11 @@ namespace IMFWrappers
         void setAttributeRatio(REFGUID guidKey, UINT32 unWidth, UINT32 unHeight)
         {
             DO_CHECKED_OPERATION(MFSetAttributeRatio(ptr, guidKey, unWidth, unHeight));
+        }
+
+        void setGUID(REFGUID guidKey, REFGUID guidValue)
+        {
+            DO_CHECKED_OPERATION(ptr->SetGUID(guidKey, guidValue));
         }
 
         void setUINT32(REFGUID guidKey, UINT32 unValue)
@@ -84,12 +74,30 @@ namespace IMFWrappers
 
     // ------------------------------------------------------------------------
 
-    class IMFMediaSourceWrapper : public AddRefWrapper<IMFMediaSource>
+    struct IMFAttributesWrapper : public AddRefWrapper<IMFAttributes>, public IMFHasAttributes<IMFAttributes>
     {
-    public:
+        IMFAttributesWrapper(const size_t size)
+        {
+            DO_CHECKED_OPERATION(MFCreateAttributes(&ptr, size));
+        }
+    };
+
+    // ------------------------------------------------------------------------
+
+    struct IMFMediaTypeWrapper : public IMFHasAttributes<IMFMediaType>
+    {
+        IMFMediaTypeWrapper()
+        {
+            DO_CHECKED_OPERATION(MFCreateMediaType(&ptr));
+        }
+    };
+
+    // ------------------------------------------------------------------------
+
+    struct IMFMediaSourceWrapper : public AddRefWrapper<IMFMediaSource>
+    {
 
         IMFMediaSourceWrapper() {}
-        IMFMediaSourceWrapper(const IMFMediaSourceWrapper& other) = delete;
 
         IMFMediaSourceWrapper(IMFMediaSourceWrapper&& other)
         {
@@ -102,8 +110,9 @@ namespace IMFWrappers
             if (ptr != nullptr)
             {
                 ptr->Shutdown();
+                ptr->Release();
+                ptr = nullptr;
             }
-            SafeRelease(&ptr);
         }
 
         MFTIME getDuration()
@@ -126,6 +135,7 @@ namespace IMFWrappers
     };
 
     // ------------------------------------------------------------------------
+
     class IMFSourceResolverWrapper : public IMFObjectWrapper<IMFSourceResolver>
     {
     public:
@@ -172,12 +182,51 @@ namespace IMFWrappers
         }
     };
 
-    class IMFTopologyWrapper : public IMFObjectWrapper<IMFTopology>
+    struct IMFTopologyWrapper : public IMFObjectWrapper<IMFTopology>
     {
-    public:
         IMFTopologyWrapper(IMFMediaSourceWrapper& pSrc, LPCWSTR pwszOutputFilePath, IMFTranscodeProfileWrapper& pProfile)
         {
             DO_CHECKED_OPERATION(MFCreateTranscodeTopology(pSrc.get(), pwszOutputFilePath, pProfile.get(), &ptr));
+        }
+    };
+
+    // ------------------------------------------------------------------------
+
+    struct IMFSinkWriterWrapper : public IMFObjectWrapper<IMFSinkWriter>
+    {
+
+        IMFSinkWriterWrapper(IMFSinkWriterWrapper&& other) : IMFObjectWrapper<IMFSinkWriter>(std::move(other)) {}
+
+        ~IMFSinkWriterWrapper()
+        {
+            if (ptr != nullptr)
+            {
+                ptr->Finalize();
+            }
+        }
+
+        // TODO: pAttributes should be of type std::optional<IMFAttributesWrapper>
+        IMFSinkWriterWrapper(std::string pwszOutputURL, IMFByteStream *pByteStream, IMFAttributes *pAttributes)
+        {
+            DO_CHECKED_OPERATION(MFCreateSinkWriterFromURL(L"output.wmv", nullptr, nullptr, &ptr));
+        }
+
+        DWORD AddStream(const IMFMediaTypeWrapper& pTargetMediaType)
+        {
+            DWORD streamIndex;
+            DO_CHECKED_OPERATION(ptr->AddStream(pTargetMediaType.get(), &streamIndex));
+            return streamIndex;
+        }
+
+        void beginWritting()
+        {
+            DO_CHECKED_OPERATION(ptr->BeginWriting());
+        }
+
+        // TODO: pEncodingParameters should be of type std::optional<IMFAttributesWrapper>
+        void setInputMediaType(DWORD dwStreamIndex, const IMFMediaTypeWrapper& pInputMediaType, IMFAttributes *pEncodingParameters)
+        {
+            DO_CHECKED_OPERATION(ptr->SetInputMediaType(dwStreamIndex, pInputMediaType.get(), nullptr));
         }
     };
 

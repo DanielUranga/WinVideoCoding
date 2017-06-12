@@ -15,13 +15,16 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="CSession.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="IMFObjectWrapper.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="EncodeFile.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SinkWriter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
