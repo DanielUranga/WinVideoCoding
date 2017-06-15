@@ -64,87 +64,36 @@ InitializeSinkWriterResult InitializeSinkWriter()
     pSinkWriter.setInputMediaType(streamIndex, pMediaTypeIn, NULL);
     pSinkWriter.beginWritting();
 
+    pSinkWriter.addRef();
+
     return InitializeSinkWriterResult(std::move(pSinkWriter), streamIndex);
 }
 
-HRESULT WriteFrame(
-    IMFSinkWriter *pWriter,
-    DWORD streamIndex,
-    const LONGLONG& rtStart        // Time stamp.
-)
+void WriteFrame(const IMFWrappers::IMFSinkWriterWrapper& pWriter, DWORD streamIndex, const LONGLONG rtStart)
 {
-    IMFSample *pSample = NULL;
-    IMFMediaBuffer *pBuffer = NULL;
-
     const LONG cbWidth = 4 * VIDEO_WIDTH;
     const DWORD cbBuffer = cbWidth * VIDEO_HEIGHT;
-
     BYTE *pData = NULL;
 
-    // Create a new memory buffer.
-    HRESULT hr = MFCreateMemoryBuffer(cbBuffer, &pBuffer);
+    IMFWrappers::IMFMediaBufferWrapper pBuffer(cbBuffer);
+    pBuffer.lock(&pData);
+    pBuffer.copyImage(pData, cbWidth, (BYTE*)videoFrameBuffer, cbWidth, cbWidth, VIDEO_HEIGHT);
+    pBuffer.unlock();
+    pBuffer.setCurrentLength(cbBuffer);
 
-    // Lock the buffer and copy the video frame to the buffer.
-    if (SUCCEEDED(hr))
-    {
-        hr = pBuffer->Lock(&pData, NULL, NULL);
-    }
-    if (SUCCEEDED(hr))
-    {
-        hr = MFCopyImage(
-            pData,                      // Destination buffer.
-            cbWidth,                    // Destination stride.
-            (BYTE*)videoFrameBuffer,    // First row in source image.
-            cbWidth,                    // Source stride.
-            cbWidth,                    // Image width in bytes.
-            VIDEO_HEIGHT                // Image height in pixels.
-        );
-    }
-    if (pBuffer)
-    {
-        pBuffer->Unlock();
-    }
+    IMFWrappers::IMFSampleWrapper pSample;
+    pSample.addBuffer(pBuffer);
+    pSample.setSampleTime(rtStart);
+    pSample.setSampleDuration(VIDEO_FRAME_DURATION);
 
-    // Set the data length of the buffer.
-    if (SUCCEEDED(hr))
-    {
-        hr = pBuffer->SetCurrentLength(cbBuffer);
-    }
+    pWriter.writeSample(streamIndex, pSample);
 
-    // Create a media sample and add the buffer to the sample.
-    if (SUCCEEDED(hr))
-    {
-        hr = MFCreateSample(&pSample);
-    }
-    if (SUCCEEDED(hr))
-    {
-        hr = pSample->AddBuffer(pBuffer);
-    }
-
-    // Set the time stamp and the duration.
-    if (SUCCEEDED(hr))
-    {
-        hr = pSample->SetSampleTime(rtStart);
-    }
-    if (SUCCEEDED(hr))
-    {
-        hr = pSample->SetSampleDuration(VIDEO_FRAME_DURATION);
-    }
-
-    // Send the sample to the Sink Writer.
-    if (SUCCEEDED(hr))
-    {
-        hr = pWriter->WriteSample(streamIndex, pSample);
-    }
-
-    SafeRelease(&pSample);
-    SafeRelease(&pBuffer);
-    return hr;
+    pSample.release();
+    pBuffer.release();
 }
 
 void main()
 {
-
     std::default_random_engine generator;
     std::uniform_int_distribution<UINT32> distribution(0, VIDEO_WIDTH);
 
@@ -164,26 +113,21 @@ void main()
             {
                 auto sinkWriterAndStream = InitializeSinkWriter();
 
-                if (SUCCEEDED(hr))
+                // Send frames to the sink writer.
+                LONGLONG rtStart = 0;
+
+                for (DWORD i = 0; i < VIDEO_FRAME_COUNT; ++i)
                 {
-                    // Send frames to the sink writer.
-                    LONGLONG rtStart = 0;
-
-                    for (DWORD i = 0; i < VIDEO_FRAME_COUNT; ++i)
+                    // Add some random pixels
+                    for (size_t j = 0; j < 200; ++j)
                     {
-                        for (size_t j = 0; j < 200; ++j)
-                        {
-                            videoFrameBuffer[distribution(generator) + (i % VIDEO_HEIGHT) * VIDEO_WIDTH] = (rand() % 0xFFFFFF);
-                        }
-
-                        hr = WriteFrame(sinkWriterAndStream.sinkWritter.get(), sinkWriterAndStream.streamIndex, rtStart);
-                        if (FAILED(hr))
-                        {
-                            break;
-                        }
-                        rtStart += VIDEO_FRAME_DURATION;
+                        videoFrameBuffer[distribution(generator) + (i % VIDEO_HEIGHT) * VIDEO_WIDTH] = (rand() % 0xFFFFFF);
                     }
+
+                    WriteFrame(sinkWriterAndStream.sinkWritter, sinkWriterAndStream.streamIndex, rtStart);
+                    rtStart += VIDEO_FRAME_DURATION;
                 }
+
             }
             catch (const WindowsError& err)
             {

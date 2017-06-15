@@ -34,15 +34,50 @@ namespace IMFWrappers
     // ------------------------------------------------------------------------
 
     template<typename T>
-    class AddRefWrapper : public virtual IMFObjectWrapper<T>
+    struct AddRefWrapper : public virtual IMFObjectWrapper<T>
     {
-    public:
         AddRefWrapper() {};
 
-        virtual void addRef()
+        AddRefWrapper(AddRefWrapper&& other) : IMFObjectWrapper(std::move(other)) {}
+
+        void addRef()
         {
-            DO_CHECKED_OPERATION(ptr->AddRef());
+            ptr->AddRef();
         }
+
+        ULONG release()
+        {
+            return ptr->Release();
+        }
+    };
+
+    struct IMFMediaBufferWrapper : public AddRefWrapper<IMFMediaBuffer>
+    {
+        IMFMediaBufferWrapper(const DWORD maxLength)
+        {
+            DO_CHECKED_OPERATION(MFCreateMemoryBuffer(maxLength, &ptr));
+        }
+
+        void copyImage(BYTE* pDest, LONG lDestStride, const BYTE* pSrc, LONG lSrcStride, DWORD dwWidthInBytes, DWORD dwLines)
+        {
+            DO_CHECKED_OPERATION(MFCopyImage(pDest, lDestStride, pSrc, lSrcStride, dwWidthInBytes, dwLines));
+        }
+
+        void lock(BYTE** pData)
+        {
+            DO_CHECKED_OPERATION(ptr->Lock(pData, nullptr, nullptr));
+        }
+
+        void setCurrentLength(DWORD currentLength)
+        {
+            DO_CHECKED_OPERATION(ptr->SetCurrentLength(currentLength));
+        }
+
+        void unlock()
+        {
+            DO_CHECKED_OPERATION(ptr->Unlock();)
+        }
+
     };
 
     // ------------------------------------------------------------------------
@@ -76,6 +111,8 @@ namespace IMFWrappers
 
     struct IMFAttributesWrapper : public AddRefWrapper<IMFAttributes>, public IMFHasAttributes<IMFAttributes>
     {
+        IMFAttributesWrapper(IMFAttributesWrapper&& other) : IMFObjectWrapper(std::move(other)) {}
+
         IMFAttributesWrapper(const size_t size)
         {
             DO_CHECKED_OPERATION(MFCreateAttributes(&ptr, size));
@@ -84,7 +121,7 @@ namespace IMFWrappers
 
     // ------------------------------------------------------------------------
 
-    struct IMFMediaTypeWrapper : public IMFHasAttributes<IMFMediaType>
+    struct IMFMediaTypeWrapper : public AddRefWrapper<IMFMediaType>, public IMFHasAttributes<IMFMediaType>
     {
         IMFMediaTypeWrapper()
         {
@@ -99,19 +136,13 @@ namespace IMFWrappers
 
         IMFMediaSourceWrapper() {}
 
-        IMFMediaSourceWrapper(IMFMediaSourceWrapper&& other)
-        {
-            this->ptr = other.ptr;
-            other.ptr = nullptr;
-        }
+        IMFMediaSourceWrapper(IMFMediaSourceWrapper&& other) : AddRefWrapper(std::move(other)) {}
 
         ~IMFMediaSourceWrapper()
         {
             if (ptr != nullptr)
             {
                 ptr->Shutdown();
-                ptr->Release();
-                ptr = nullptr;
             }
         }
 
@@ -160,11 +191,7 @@ namespace IMFWrappers
             DO_CHECKED_OPERATION(MFCreateTranscodeProfile(&ptr));
         }
 
-        IMFTranscodeProfileWrapper(IMFTranscodeProfileWrapper&& other)
-        {
-            this->ptr = other.ptr;
-            other.ptr = nullptr;
-        }
+        IMFTranscodeProfileWrapper(IMFTranscodeProfileWrapper&& other) : AddRefWrapper(std::move(other)) {}
 
         void SetAudioAttributes(IMFAttributesWrapper& attr)
         {
@@ -192,7 +219,34 @@ namespace IMFWrappers
 
     // ------------------------------------------------------------------------
 
-    struct IMFSinkWriterWrapper : public IMFObjectWrapper<IMFSinkWriter>
+    struct IMFSampleWrapper : public AddRefWrapper<IMFSample>
+    {
+
+        IMFSampleWrapper()
+        {
+            DO_CHECKED_OPERATION(MFCreateSample(&ptr));
+        }
+
+        void addBuffer(const IMFMediaBufferWrapper& buffer)
+        {
+            DO_CHECKED_OPERATION(ptr->AddBuffer(buffer.get()));
+        }
+
+        void setSampleDuration(const LONGLONG duration)
+        {
+            DO_CHECKED_OPERATION(ptr->SetSampleDuration(duration));
+        }
+
+        void setSampleTime(const LONGLONG time)
+        {
+            DO_CHECKED_OPERATION(ptr->SetSampleTime(time));
+        }
+
+    };
+
+    // ------------------------------------------------------------------------
+
+    struct IMFSinkWriterWrapper : public AddRefWrapper<IMFSinkWriter>
     {
 
         IMFSinkWriterWrapper(IMFSinkWriterWrapper&& other) : IMFObjectWrapper<IMFSinkWriter>(std::move(other)) {}
@@ -228,6 +282,12 @@ namespace IMFWrappers
         {
             DO_CHECKED_OPERATION(ptr->SetInputMediaType(dwStreamIndex, pInputMediaType.get(), nullptr));
         }
+
+        void writeSample(DWORD streamIndex, const IMFSampleWrapper& sample) const
+        {
+            DO_CHECKED_OPERATION(ptr->WriteSample(streamIndex, sample.get()));
+        }
+
     };
 
 }
